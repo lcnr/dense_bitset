@@ -55,6 +55,7 @@ const FRAME_SIZE: usize = mem::size_of::<Frame>() * 8;
 /// assert!(b.is_subset(&a));
 /// assert!(a.is_superset(&b));
 /// ```
+#[derive(Default)]
 pub struct BitSet {
     inner: Vec<Frame>,
 }
@@ -637,6 +638,7 @@ mod tests {
     #[test]
     fn test() {
         let mut set = BitSet::new();
+        assert_eq!(set, BitSet::default());
         assert_eq!(set.element_count(), 0);
         assert_eq!(set.get(1000000), false);
         assert_eq!(set.inner.len(), 0);
