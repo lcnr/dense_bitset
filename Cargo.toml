@@ -6,6 +6,6 @@ edition = "2018"
 repository = "https://github.com/lcnr/dense_bitset"
 categories = ["data-structures", "memory-management"]
 license = "MIT"
-keywords = ["heap", "set", "vec", "vec"]
+keywords = ["heap", "set", "vec"]
 readme = "README.md"
 description = "A variably sized, heap allocated, dense bitset implemented using no `unsafe` code."
