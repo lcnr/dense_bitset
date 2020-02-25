@@ -436,7 +436,7 @@ impl BitSet {
     /// assert_eq!(Some(7), set.highest_bit());
     /// ```
     pub fn highest_bit(&self) -> Option<usize> {
-        self.iter().next_back()
+        self.indices().next_back()
     }
 
     /// Returns the lowest index for which the entry is set to `true`.
@@ -455,7 +455,7 @@ impl BitSet {
     /// assert_eq!(Some(3), set.lowest_bit());
     /// ```
     pub fn lowest_bit(&self) -> Option<usize> {
-        self.iter().next()
+        self.indices().next()
     }
 
     /// Returns an iterator over the bitset which returns all indices of entries set to `true`.
@@ -465,8 +465,8 @@ impl BitSet {
     ///
     /// ```
     /// # use dense_bitset::BitSet;
-    /// let set: BitSet = [1, 12, 19, 4].iter().copied().collect();
-    /// let mut iter = set.iter();
+    /// let set: BitSet = [1, 12, 19, 4].iter().collect();
+    /// let mut iter = set.indices();
     ///
     /// assert_eq!(Some(1), iter.next());
     /// assert_eq!(Some(4), iter.next());
@@ -474,11 +474,37 @@ impl BitSet {
     /// assert_eq!(Some(19), iter.next());
     /// assert_eq!(None, iter.next());
     /// ```
-    pub fn iter(&self) -> IdxIter<&Self> {
-        IdxIter {
+    pub fn indices(&self) -> Indices {
+        Indices {
             inner: self,
             pos: 0,
             end_pos: self.inner.len() * FRAME_SIZE,
+        }
+    }
+
+    /// Returns an infinte iterator returning the value of each entry in this `BitSet`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use dense_bitset::BitSet;
+    /// let set: BitSet = [1, 4].iter().collect();
+    /// let mut iter = set.entries();
+    ///
+    /// assert_eq!(Some(false), iter.next());
+    /// assert_eq!(Some(true), iter.next());
+    /// assert_eq!(Some(false), iter.next());
+    /// assert_eq!(Some(false), iter.next());
+    /// assert_eq!(Some(true), iter.next());
+    /// // returns false indefinitely
+    /// for i in 0..100 {
+    ///     assert_eq!(Some(false), iter.next());
+    /// }
+    /// ```
+    pub fn entries(&self) -> Entries {
+        Entries {
+            inner: self,
+            pos: 0,
         }
     }
 }
@@ -536,49 +562,30 @@ impl FromIterator<usize> for BitSet {
     }
 }
 
-impl IntoIterator for BitSet {
-    type Item = usize;
-    type IntoIter = IdxIter<BitSet>;
-
-    fn into_iter(self) -> IdxIter<BitSet> {
-        let end_pos = self.inner.len() * FRAME_SIZE;
-
-        IdxIter {
-            inner: self,
-            pos: 0,
-            end_pos,
-        }
-    }
-}
-
-/// A iterator over the `true` entries of a `BitSet`.
+/// An iterator returning the indices of all `true` entries in a `BitSet`.
 ///
-/// This struct is created by calling [`BitSet::iter`].
+/// This struct is created by calling [`BitSet::indices`].
 ///
 /// # Examples
 ///
 /// ```
 /// # use dense_bitset::BitSet;
-/// use dense_bitset::IdxIter;
+/// use dense_bitset::Indices;
 ///
 /// let set: BitSet = [4, 3, 12, 19].iter().collect();
 ///
-/// let mut ref_iter = set.iter();
-/// assert!([3, 4, 12, 19].iter().all(|&e| e == ref_iter.next().unwrap()));
-/// assert_eq!(None, ref_iter.next());
-///
-/// let mut owned_iter = set.into_iter();
-/// assert!([3, 4, 12, 19].iter().all(|&e| e == owned_iter.next().unwrap()));
-/// assert_eq!(None, owned_iter.next());
+/// let mut indices = set.indices();
+/// let mut slice_iter = [3, 4, 12, 19].iter();
+/// assert!(slice_iter.zip(indices).all(|(&s, i)| s == i));
 /// ```
-/// [`BitSet::iter`]: ./struct.BitSet.html#method.iter
-pub struct IdxIter<B> {
-    inner: B,
+/// [`BitSet::indices`]: ./struct.BitSet.html#method.indices
+pub struct Indices<'a> {
+    inner: &'a BitSet,
     pos: usize,
     end_pos: usize,
 }
 
-impl<B: Borrow<BitSet>> Iterator for IdxIter<B> {
+impl<'a> Iterator for Indices<'a> {
     type Item = usize;
 
     fn next(&mut self) -> Option<usize> {
@@ -593,7 +600,7 @@ impl<B: Borrow<BitSet>> Iterator for IdxIter<B> {
     }
 }
 
-impl<B: Borrow<BitSet>> DoubleEndedIterator for IdxIter<B> {
+impl<'a> DoubleEndedIterator for Indices<'a> {
     fn next_back(&mut self) -> Option<usize> {
         while self.end_pos > self.pos {
             let pos = self.end_pos;
@@ -614,7 +621,43 @@ impl<B: Borrow<BitSet>> DoubleEndedIterator for IdxIter<B> {
     }
 }
 
-impl<B: Borrow<BitSet>> FusedIterator for IdxIter<B> {}
+impl<'a> FusedIterator for Indices<'a> {}
+
+/// An infinte iterator returning the value of each entry in a `BitSet`.
+///
+/// This struct is created by calling [`BitSet::entries`].
+///
+/// # Examples
+///
+/// ```
+/// # use dense_bitset::BitSet;
+/// use dense_bitset::Indices;
+///
+/// let set: BitSet = [0, 1, 3].iter().collect();
+///
+/// let mut entries = set.entries();
+/// let mut slice_iter = [true, true, false, true, false, false].iter();
+/// assert!(slice_iter.zip(entries).all(|(&s, e)| s == e));
+/// ```
+/// [`BitSet::iter`]: ./struct.BitSet.html#method.iter
+pub struct Entries<'a> {
+    inner: &'a BitSet,
+    pos: usize,
+}
+
+impl<'a> Iterator for Entries<'a> {
+    type Item = bool;
+
+    fn next(&mut self) -> Option<bool> {
+        let pos = self.pos;
+        self.pos = self.pos.saturating_add(1);
+        if self.inner.get(pos) {
+            Some(true)
+        } else {
+            Some(false)
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -700,7 +743,7 @@ mod tests {
     }
 
     #[test]
-    fn iter() {
+    fn indices() {
         let mut set: BitSet = [7, 4, 3, 4, 1, 1000].iter().collect();
         assert_eq!(set.get(1), true);
         assert_eq!(set.get(2), false);
@@ -711,7 +754,7 @@ mod tests {
         assert_eq!(set.get(99), false);
         assert_eq!(set.get(1000), true);
 
-        let mut iter = set.iter();
+        let mut iter = set.indices();
         assert_eq!(iter.next(), Some(0));
         assert_eq!(iter.next(), Some(1));
         assert_eq!(iter.next(), Some(3));
@@ -726,7 +769,7 @@ mod tests {
         assert_eq!(set.get(2), false);
         assert_eq!(set.get(5), true);
 
-        let mut iter = set.into_iter();
+        let mut iter = set.indices();
         assert_eq!(iter.next(), Some(1));
         assert_eq!(iter.next(), Some(3));
         assert_eq!(iter.next(), Some(4));
@@ -737,18 +780,30 @@ mod tests {
         assert_eq!(iter.next_back(), None);
 
         let set: BitSet = [0, 1].iter().collect();
-        let mut iter = set.iter();
+        let mut iter = set.indices();
         assert_eq!(iter.next_back(), Some(1));
         assert_eq!(iter.next_back(), Some(0));
         assert_eq!(iter.next_back(), None);
-        let mut iter = set.iter();
+        let mut iter = set.indices();
         assert_eq!(iter.next_back(), Some(1));
         assert_eq!(iter.next(), Some(0));
         assert_eq!(iter.next_back(), None);
-        let mut iter = set.iter();
+        let mut iter = set.indices();
         assert_eq!(iter.next(), Some(0));
         assert_eq!(iter.next_back(), Some(1));
         assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn entries() {
+        let set: BitSet = [1, 4].iter().collect();
+        let mut iter = set.entries();
+        assert_eq!(iter.next(), Some(false));
+        assert_eq!(iter.next(), Some(true));
+        assert_eq!(iter.next(), Some(false));
+        assert_eq!(iter.next(), Some(false));
+        assert_eq!(iter.next(), Some(true));
+        assert_eq!(iter.next(), Some(false));
     }
 
     #[test]
